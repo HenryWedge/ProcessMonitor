@@ -1,4 +1,5 @@
 import json
+import os
 
 import pm4py
 from flask import Flask
@@ -17,18 +18,29 @@ from process_monitor.petri_net_serdes import PetriNetSerDes
 
 app = Flask(__name__)
 
+def env_or_default(env_key, default_value):
+    if env_key in os.environ:
+        return os.environ[env_key]
+    else:
+        print("Warning! Env not set using default value")
+        return default_value
+
 app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {
     '/metrics': make_wsgi_app()
 })
 
+log_topic = env_or_default("LOG_TOPIC", "input")
+model_topic = env_or_default("MODEL_TOPIC", "model")
+bootstrap_server = env_or_default("BOOTSTRAP_SERVER", "minikube:32207")
+
 log_consumer = KafkaConsumer(
-        "input",
-        bootstrap_servers="minikube:32207",
+        log_topic,
+        bootstrap_servers=bootstrap_server,
         group_id="process-monitor")
 
 model_consumer = KafkaConsumer(
-        "model",
-        bootstrap_servers="minikube:32207",
+        model_topic,
+        bootstrap_servers=bootstrap_server,
         group_id="process-monitor2")
 
 PRECISION_TBR = Gauge(
@@ -121,6 +133,8 @@ def get_accuracy():
             update_precision(precision_results, event_log, petri_net, initial_marking, final_marking)
             update_fitness(fitness_results, event_log, petri_net, initial_marking, final_marking)
         time.sleep(evaluation_interval)
+
+
 
 @app.route('/')
 def index():
